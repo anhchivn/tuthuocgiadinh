@@ -222,7 +222,11 @@
       </p>
     </div>
 
-    <div class="flex gap-2 pt-1">
+    <button onclick="testAPIConnection()" class="w-full py-2 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition">
+      🔌 Test kết nối API
+    </button>
+
+    <div class="flex gap-2">
       <button onclick="closeSettings()" class="flex-1 py-2 border border-slate-200 rounded-xl text-sm hover:bg-slate-50 transition">Huỷ</button>
       <button onclick="saveSettings()" class="flex-1 py-2 bg-sky-600 text-white rounded-xl text-sm font-semibold hover:bg-sky-700 transition">Lưu</button>
     </div>
@@ -528,6 +532,37 @@ function saveSettings() {
   closeSettings();
   toast('Đã lưu cài đặt');
 }
+async function testAPIConnection() {
+  const key = document.getElementById('apiKeyInput').value.trim() || getApiKey();
+  if (!key) { alert('Chưa có API key'); return; }
+
+  toast('Đang test...');
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-allow-browser': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Hi' }]
+      })
+    });
+    const d = await r.json();
+    if (r.ok) {
+      alert('✅ Kết nối OK!\nModel: ' + d.model);
+    } else {
+      alert('❌ Lỗi HTTP ' + r.status + '\n' + (d.error?.message || JSON.stringify(d)));
+    }
+  } catch (e) {
+    alert('❌ Lỗi kết nối:\n' + e.name + ': ' + e.message + (e.cause ? '\nCause: ' + JSON.stringify(e.cause) : ''));
+  }
+}
+
 function checkApiKey() {
   const has = !!localStorage.getItem('anthropic_api_key');
   document.getElementById('noKeyBanner').classList.toggle('hidden', has);
