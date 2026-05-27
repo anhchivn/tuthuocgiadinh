@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>Tủ thuốc gia đình</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="theme-color" content="#0ea5e9"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="Tủ Thuốc"/>
+  <style>
+    /* iPad-first: minimum touch target 44px */
+    button { min-height: 44px; }
+    input, select, textarea { min-height: 44px; font-size: 16px; } /* 16px prevents iOS zoom */
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .med-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 14px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { display: inline-block; animation: spin 1s linear infinite; }
+
+    /* Fade-in for modals */
+    .modal-wrap { transition: opacity 0.15s; }
+    .modal-wrap.hidden { opacity: 0; pointer-events: none; }
+
+    /* line clamp */
+    .clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* Safe area for iOS home bar */
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 select-none">
+
+<!-- ===================== HEADER ===================== -->
+<header class="bg-sky-600 text-white px-4 py-3 flex items-center justify-between shadow-md sticky top-0 z-30">
+  <div class="flex items-center gap-2">
+    <span class="text-2xl">💊</span>
+    <h1 class="font-bold text-lg leading-tight">Tủ thuốc gia đình</h1>
+  </div>
+  <button onclick="openSettings()" aria-label="Cài đặt"
+    class="p-2 rounded-xl hover:bg-sky-700 active:bg-sky-800 transition-colors">
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+    </svg>
+  </button>
+</header>
+
+<!-- API key warning -->
+<div id="noKeyBanner" class="hidden bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800 flex items-center gap-2">
+  <span>⚠️</span>
+  <span>Chưa có Anthropic API key — chức năng AI sẽ không hoạt động.
+    <button onclick="openSettings()" class="underline font-semibold ml-1">Thêm ngay</button>
+  </span>
+</div>
+
+<!-- Backup reminder banner -->
+<div id="backupBanner" class="hidden bg-blue-50 border-b border-blue-200 px-4 py-2 text-sm text-blue-800 flex items-center justify-between gap-2">
+  <div class="flex items-center gap-2">
+    <span>💾</span>
+    <span id="backupBannerText">Đã lâu chưa backup dữ liệu.</span>
+  </div>
+  <div class="flex items-center gap-2 flex-shrink-0">
+    <button onclick="exportData()" class="bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors">
+      Backup ngay
+    </button>
+    <button onclick="dismissBackupBanner()" class="text-blue-400 hover:text-blue-600 text-xl leading-none px-1">&times;</button>
+  </div>
+</div>
+
+<!-- ===================== TAB NAV ===================== -->
+<nav class="bg-white border-b border-slate-200 sticky top-[60px] z-20 shadow-sm">
+  <div class="flex max-w-4xl mx-auto">
+    <button id="tab-btn-meds" onclick="switchTab('meds')"
+      class="flex-1 py-3 text-sm font-semibold border-b-2 border-sky-500 text-sky-600 transition-colors">
+      🔍 Thuốc
+    </button>
+    <button id="tab-btn-rx" onclick="switchTab('rx')"
+      class="flex-1 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">
+      📋 Toa thuốc
+    </button>
+    <button id="tab-btn-chat" onclick="switchTab('chat')"
+      class="flex-1 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">
+      💬 Chat AI
+    </button>
+  </div>
+</nav>
+
+<!-- ===================== MAIN ===================== -->
+<main class="max-w-4xl mx-auto px-4 pt-4 pb-28">
+
+  <!-- ===== TAB: MEDICINES ===== -->
+  <div id="tab-meds" class="tab-content active">
+    <div class="relative mb-4">
+      <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">🔍</span>
+      <input type="search" id="searchInput" placeholder="Tìm tên thuốc, hoạt chất, chỉ định..."
+        oninput="handleSearch(this.value)"
+        class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+    </div>
+    <div id="medGrid" class="med-grid"></div>
+    <div id="medEmpty" class="hidden text-center py-20 text-slate-400">
+      <div class="text-5xl mb-3">💊</div>
+      <p class="text-lg font-semibold">Chưa có thuốc nào</p>
+      <p class="text-sm mt-1">Nhấn "+ Thêm thuốc" để bắt đầu</p>
+    </div>
+    <div id="medNoResult" class="hidden text-center py-20 text-slate-400">
+      <div class="text-5xl mb-3">🔍</div>
+      <p class="text-lg font-semibold">Không tìm thấy</p>
+      <p class="text-sm mt-1">Thử từ khóa khác</p>
+    </div>
+  </div>
+
+  <!-- ===== TAB: PRESCRIPTIONS ===== -->
+  <div id="tab-rx" class="tab-content">
+    <div id="rxList" class="space-y-3"></div>
+    <div id="rxEmpty" class="hidden text-center py-20 text-slate-400">
+      <div class="text-5xl mb-3">📋</div>
+      <p class="text-lg font-semibold">Chưa có toa thuốc nào</p>
+      <p class="text-sm mt-1">Nhấn "+ Thêm toa" để bắt đầu</p>
+    </div>
+  </div>
+
+  <!-- ===== TAB: CHAT ===== -->
+  <div id="tab-chat" class="tab-content">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden"
+      style="height: calc(100dvh - 230px); min-height: 300px;">
+      <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-3">
+        <p class="text-center text-slate-400 text-sm py-4">
+          Hỏi về tương tác thuốc, liều dùng, tác dụng phụ...<br/>AI sẽ trả lời dựa trên tủ thuốc của bạn.
+        </p>
+      </div>
+      <div class="border-t border-slate-100 p-3 flex gap-2 items-end safe-bottom">
+        <textarea id="chatInput" rows="1" placeholder="Nhập câu hỏi... (Enter để gửi)"
+          oninput="autoResizeTextarea(this)"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"
+          class="flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400 leading-normal"></textarea>
+        <button onclick="sendChat()" id="chatSendBtn"
+          class="bg-sky-600 text-white rounded-xl px-4 py-2 font-semibold hover:bg-sky-700 active:bg-sky-800 transition-colors whitespace-nowrap">
+          Gửi
+        </button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- FABs (per tab) -->
+<div id="fab-meds" class="fixed bottom-6 right-4 z-20">
+  <button onclick="openMedModal(null)"
+    class="bg-sky-600 text-white rounded-2xl shadow-lg px-5 py-3 font-bold hover:bg-sky-700 active:scale-95 transition flex items-center gap-2">
+    <span class="text-xl leading-none">+</span> Thêm thuốc
+  </button>
+</div>
+<div id="fab-rx" class="fixed bottom-6 right-4 z-20 hidden">
+  <button onclick="openRxModal(null)"
+    class="bg-sky-600 text-white rounded-2xl shadow-lg px-5 py-3 font-bold hover:bg-sky-700 active:scale-95 transition flex items-center gap-2">
+    <span class="text-xl leading-none">+</span> Thêm toa
+  </button>
+</div>
+
+<!-- ===================== MODAL: SETTINGS ===================== -->
+<div id="settingsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onclick="if(event.target===this)closeSettings()">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5">
+    <div class="flex items-center justify-between">
+      <h2 class="font-bold text-lg">⚙️ Cài đặt</h2>
+      <button onclick="closeSettings()" class="text-slate-400 hover:text-slate-600 text-3xl leading-none">&times;</button>
+    </div>
+
+    <div>
+      <label class="block text-sm font-semibold text-slate-700 mb-1">Anthropic API Key</label>
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-..."
+        class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+      <p class="text-xs text-slate-400 mt-1">Lưu trong localStorage, không bao giờ lên GitHub</p>
+    </div>
+
+    <div>
+      <p class="text-sm font-semibold text-slate-700 mb-2">Dữ liệu</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="exportData()" class="py-2 border border-slate-200 rounded-xl text-sm hover:bg-slate-50 active:bg-slate-100 transition">📤 Xuất JSON</button>
+        <button onclick="document.getElementById('importFile').click()" class="py-2 border border-slate-200 rounded-xl text-sm hover:bg-slate-50 active:bg-slate-100 transition">📥 Nhập JSON</button>
+        <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(this)"/>
+      </div>
+      <p id="lastBackupInfo" class="text-xs text-slate-400 mt-2"></p>
+      <div class="flex items-center gap-2 mt-2">
+        <label class="text-xs text-slate-500 flex-shrink-0">Nhắc sau</label>
+        <select id="backupIntervalSelect" onchange="saveBackupInterval(this.value)"
+          class="flex-1 px-2 py-1 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sky-400">
+          <option value="3">3 ngày</option>
+          <option value="7" selected>7 ngày</option>
+          <option value="14">14 ngày</option>
+          <option value="30">30 ngày</option>
+          <option value="0">Không nhắc</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <p class="text-sm font-semibold text-slate-700 mb-2">📱 PWA / Offline</p>
+      <button id="pwaInstallBtn" class="hidden w-full py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition">
+        Thêm vào Home Screen
+      </button>
+      <p id="pwaNote" class="text-xs text-slate-400">
+        Trên iPhone/iPad: Safari → Chia sẻ → Thêm vào màn hình chính
+      </p>
+    </div>
+
+    <div class="flex gap-2 pt-1">
+      <button onclick="closeSettings()" class="flex-1 py-2 border border-slate-200 rounded-xl text-sm hover:bg-slate-50 transition">Huỷ</button>
+      <button onclick="saveSettings()" class="flex-1 py-2 bg-sky-600 text-white rounded-xl text-sm font-semibold hover:bg-sky-700 transition">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: ADD/EDIT MEDICINE ===================== -->
+<div id="medModal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onclick="if(event.target===this)closeMedModal()">
+  <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[93dvh] overflow-y-auto flex flex-col">
+    <!-- sticky header -->
+    <div class="sticky top-0 bg-white rounded-t-2xl px-5 pt-5 pb-3 border-b border-slate-100 flex items-center justify-between z-10">
+      <h2 id="medModalTitle" class="font-bold text-base">+ Thêm thuốc</h2>
+      <button onclick="closeMedModal()" class="text-slate-400 hover:text-slate-600 text-3xl leading-none">&times;</button>
+    </div>
+
+    <div class="px-5 py-4 space-y-4 flex-1">
+      <input type="hidden" id="medId"/>
+
+      <!-- Image -->
+      <div>
+        <p class="text-sm font-semibold text-slate-700 mb-2">Hình ảnh</p>
+        <div class="relative">
+          <div id="medImgPlaceholder" onclick="document.getElementById('medImgInput').click()"
+            class="h-44 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 cursor-pointer hover:border-sky-400 hover:text-sky-500 transition-colors">
+            <span class="text-4xl mb-1">📷</span>
+            <span class="text-sm">Chụp hoặc chọn ảnh</span>
+          </div>
+          <img id="medImgPreview" class="hidden w-full h-44 object-cover rounded-2xl cursor-pointer"
+            onclick="document.getElementById('medImgInput').click()"/>
+          <button id="medImgRemoveBtn" onclick="removeMedImg()" class="hidden absolute top-2 right-2 bg-white/90 shadow rounded-full w-8 h-8 flex items-center justify-center text-slate-500 hover:text-red-500 transition-colors text-lg">✕</button>
+        </div>
+        <input type="file" id="medImgInput" class="hidden" accept="image/*" capture="environment" onchange="onMedImgSelected(this)"/>
+        <button id="ocrMedBtn" onclick="ocrMedImage()" class="hidden mt-2 w-full py-2 border border-sky-300 text-sky-700 rounded-xl text-sm font-medium hover:bg-sky-50 transition-colors">
+          🔍 Đọc tên thuốc từ ảnh (OCR)
+        </button>
+      </div>
+
+      <!-- Name + AI fill -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Tên thuốc <span class="text-red-400">*</span></label>
+        <div class="flex gap-2">
+          <input type="text" id="medName" placeholder="Paracetamol..."
+            class="flex-1 px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+          <button onclick="aiFillMed()" id="aiFillBtn"
+            class="px-3 py-2 bg-sky-100 text-sky-700 rounded-xl text-sm font-semibold hover:bg-sky-200 active:bg-sky-300 transition-colors whitespace-nowrap">
+            ✨ AI điền
+          </button>
+        </div>
+      </div>
+
+      <!-- Active ingredient -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Hoạt chất</label>
+        <input type="text" id="medIngredient" placeholder="Acetaminophen..."
+          class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+      </div>
+
+      <!-- Indication -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Chỉ định (dùng cho bệnh gì)</label>
+        <textarea id="medIndication" rows="2" placeholder="Hạ sốt, giảm đau đầu..."
+          class="w-full px-3 py-2 border border-slate-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-sky-400"></textarea>
+      </div>
+
+      <!-- Contraindication -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Chống chỉ định</label>
+        <textarea id="medContra" rows="2" placeholder="Mẫn cảm với thành phần, suy gan nặng..."
+          class="w-full px-3 py-2 border border-slate-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-sky-400"></textarea>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Ghi chú</label>
+        <textarea id="medNotes" rows="2" placeholder="Liều dùng, bảo quản, hạn dùng..."
+          class="w-full px-3 py-2 border border-slate-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-sky-400"></textarea>
+      </div>
+
+      <!-- AI loading -->
+      <div id="medAiLoading" class="hidden text-center text-sky-600 text-sm py-1">
+        <span class="spin">⟳</span> Đang tra cứu thông tin thuốc...
+      </div>
+    </div>
+
+    <!-- sticky footer -->
+    <div class="sticky bottom-0 bg-white px-5 py-4 border-t border-slate-100 flex gap-2 safe-bottom">
+      <button onclick="closeMedModal()" class="flex-1 py-3 border border-slate-200 rounded-xl text-sm hover:bg-slate-50 transition">Huỷ</button>
+      <button onclick="saveMed()" class="flex-1 py-3 bg-sky-600 text-white rounded-xl text-sm font-bold hover:bg-sky-700 active:bg-sky-800 transition">Lưu thuốc</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: MEDICINE DETAIL ===================== -->
+<div id="medDetailModal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onclick="if(event.target===this)closeMedDetail()">
+  <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[93dvh] overflow-y-auto">
+    <div id="medDetailContent"></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: ADD/EDIT PRESCRIPTION ===================== -->
+<div id="rxModal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onclick="if(event.target===this)closeRxModal()">
+  <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[93dvh] overflow-y-auto flex flex-col">
+    <div class="sticky top-0 bg-white rounded-t-2xl px-5 pt-5 pb-3 border-b border-slate-100 flex items-center justify-between z-10">
+      <h2 id="rxModalTitle" class="font-bold text-base">+ Thêm toa thuốc</h2>
+      <button onclick="closeRxModal()" class="text-slate-400 hover:text-slate-600 text-3xl leading-none">&times;</button>
+    </div>
+
+    <div class="px-5 py-4 space-y-4 flex-1">
+      <input type="hidden" id="rxId"/>
+
+      <!-- Prescription image -->
+      <div>
+        <p class="text-sm font-semibold text-slate-700 mb-2">Ảnh toa thuốc</p>
+        <div class="relative">
+          <div id="rxImgPlaceholder" onclick="document.getElementById('rxImgInput').click()"
+            class="h-36 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 cursor-pointer hover:border-sky-400 hover:text-sky-500 transition-colors">
+            <span class="text-4xl mb-1">📄</span>
+            <span class="text-sm">Chụp hoặc chọn ảnh toa</span>
+          </div>
+          <img id="rxImgPreview" class="hidden w-full h-36 object-cover rounded-2xl cursor-pointer"
+            onclick="document.getElementById('rxImgInput').click()"/>
+          <button id="rxImgRemoveBtn" onclick="removeRxImg()" class="hidden absolute top-2 right-2 bg-white/90 shadow rounded-full w-8 h-8 flex items-center justify-center text-slate-500 hover:text-red-500 transition-colors text-lg">✕</button>
+        </div>
+        <input type="file" id="rxImgInput" class="hidden" accept="image/*" capture="environment" onchange="onRxImgSelected(this)"/>
+        <button id="ocrRxBtn" onclick="ocrRxImage()" class="hidden mt-2 w-full py-2 border border-sky-300 text-sky-700 rounded-xl text-sm font-medium hover:bg-sky-50 transition-colors">
+          🔍 Nhận dạng thuốc từ ảnh toa (OCR)
+        </button>
+        <div id="rxOcrLoading" class="hidden text-center text-sky-600 text-sm py-1 mt-1">
+          <span class="spin">⟳</span> Đang nhận dạng toa...
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Bệnh nhân <span class="text-red-400">*</span></label>
+        <input type="text" id="rxPatient" placeholder="Tên thành viên gia đình..."
+          class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">Ngày kê toa</label>
+          <input type="date" id="rxDate"
+            class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">Bác sĩ</label>
+          <input type="text" id="rxDoctor" placeholder="Tên bác sĩ..."
+            class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Bệnh viện / Phòng khám</label>
+        <input type="text" id="rxHospital" placeholder="Tên cơ sở y tế..."
+          class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Chẩn đoán / Ghi chú</label>
+        <textarea id="rxNotes" rows="2" placeholder="Chẩn đoán, lý do dùng thuốc..."
+          class="w-full px-3 py-2 border border-slate-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-sky-400"></textarea>
+      </div>
+
+      <!-- Prescription items -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-sm font-semibold text-slate-700">Danh sách thuốc trong toa</p>
+          <button onclick="addRxItem()" class="text-sky-600 text-sm font-semibold hover:text-sky-700">+ Thêm thuốc</button>
+        </div>
+        <div id="rxItemsContainer" class="space-y-3"></div>
+      </div>
+    </div>
+
+    <div class="sticky bottom-0 bg-white px-5 py-4 border-t border-slate-100 flex gap-2 safe-bottom">
+      <button onclick="closeRxModal()" class="flex-1 py-3 border border-slate-200 rounded-xl text-sm hover:bg-slate-50 transition">Huỷ</button>
+      <button onclick="saveRx()" class="flex-1 py-3 bg-sky-600 text-white rounded-xl text-sm font-bold hover:bg-sky-700 active:bg-sky-800 transition">Lưu toa</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PRESCRIPTION DETAIL ===================== -->
+<div id="rxDetailModal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onclick="if(event.target===this)closeRxDetail()">
+  <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[93dvh] overflow-y-auto">
+    <div id="rxDetailContent"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-800/95 text-white px-5 py-3 rounded-2xl text-sm font-medium shadow-xl z-50 whitespace-nowrap max-w-xs text-center"></div>
+
+<script>
+// ================================================================
+// 1. DATABASE (IndexedDB)
+// ================================================================
+let DB = null;
+
+async function initDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('TuThuocDB', 1);
+
+    req.onupgradeneeded = ({ target: { result: d } }) => {
+      if (!d.objectStoreNames.contains('medicines')) {
+        const s = d.createObjectStore('medicines', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('name', 'name');
+        s.createIndex('created_at', 'created_at');
+      }
+      if (!d.objectStoreNames.contains('prescriptions')) {
+        const s = d.createObjectStore('prescriptions', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('patient', 'patient');
+        s.createIndex('date', 'date');
+      }
+      if (!d.objectStoreNames.contains('rx_items')) {
+        const s = d.createObjectStore('rx_items', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('rx_id', 'rx_id');
+      }
+    };
+
+    req.onsuccess = e => { DB = e.target.result; resolve(); };
+    req.onerror = e => reject(e.target.error);
+  });
+}
+
+const dbAll  = store => idbReq(store, 'readonly',  s => s.getAll());
+const dbGet  = (store, id) => idbReq(store, 'readonly',  s => s.get(id));
+const dbAdd  = (store, v) => idbReq(store, 'readwrite', s => s.add(v));
+const dbPut  = (store, v) => idbReq(store, 'readwrite', s => s.put(v));
+const dbDel  = (store, id) => idbReq(store, 'readwrite', s => s.delete(id));
+const dbIdx  = (store, idx, val) => idbReq(store, 'readonly', s => s.index(idx).getAll(val));
+
+function idbReq(store, mode, fn) {
+  return new Promise((res, rej) => {
+    const req = fn(DB.transaction(store, mode).objectStore(store));
+    req.onsuccess = () => res(req.result);
+    req.onerror  = () => rej(req.error);
+  });
+}
+
+// ================================================================
+// 2. STATE
+// ================================================================
+let allMeds = [];      // all medicines in memory for fast search
+let medImgBlob = null; // current medicine image
+let rxImgBlob  = null; // current prescription image
+let chatHistory = [];
+let pwaPrompt = null;
+
+// ================================================================
+// 3. BOOT
+// ================================================================
+async function boot() {
+  await initDB();
+  registerSW();
+  checkApiKey();
+  checkBackupReminder();
+  await refreshMeds();
+  await refreshRx();
+  initPWA();
+}
+
+function registerSW() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+}
+
+// ================================================================
+// 4. TAB SWITCHING
+// ================================================================
+function switchTab(tab) {
+  ['meds', 'rx', 'chat'].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+    document.getElementById(`tab-btn-${t}`).classList.toggle('border-sky-500', t === tab);
+    document.getElementById(`tab-btn-${t}`).classList.toggle('text-sky-600',   t === tab);
+    document.getElementById(`tab-btn-${t}`).classList.toggle('border-transparent', t !== tab);
+    document.getElementById(`tab-btn-${t}`).classList.toggle('text-slate-500',  t !== tab);
+    const fab = document.getElementById(`fab-${t}`);
+    if (fab) fab.classList.toggle('hidden', t !== tab);
+  });
+  // No FAB for chat
+  if (tab === 'chat') {
+    document.getElementById('fab-meds').classList.add('hidden');
+    document.getElementById('fab-rx').classList.add('hidden');
+  }
+}
+
+// ================================================================
+// 5. SETTINGS
+// ================================================================
+function openSettings() {
+  document.getElementById('apiKeyInput').value = localStorage.getItem('anthropic_api_key') || '';
+  updateLastBackupInfo();
+  syncBackupIntervalUI();
+  document.getElementById('settingsModal').classList.remove('hidden');
+}
+function closeSettings() {
+  document.getElementById('settingsModal').classList.add('hidden');
+}
+function saveSettings() {
+  const k = document.getElementById('apiKeyInput').value.trim();
+  if (k) localStorage.setItem('anthropic_api_key', k);
+  else   localStorage.removeItem('anthropic_api_key');
+  checkApiKey();
+  closeSettings();
+  toast('Đã lưu cài đặt');
+}
+function checkApiKey() {
+  const has = !!localStorage.getItem('anthropic_api_key');
+  document.getElementById('noKeyBanner').classList.toggle('hidden', has);
+}
+function getApiKey() { return localStorage.getItem('anthropic_api_key'); }
+
+// ================================================================
+// 5b. BACKUP REMINDER
+// ================================================================
+const BACKUP_TS_KEY   = 'last_backup_ts';
+const BACKUP_INT_KEY  = 'backup_interval_days';
+const BACKUP_DISMISSED_KEY = 'backup_banner_dismissed_ts';
+
+function checkBackupReminder() {
+  const intervalDays = parseInt(localStorage.getItem(BACKUP_INT_KEY) || '7', 10);
+  if (intervalDays === 0) return; // user turned off reminders
+
+  const lastTs   = parseInt(localStorage.getItem(BACKUP_TS_KEY) || '0', 10);
+  const dismissed = parseInt(localStorage.getItem(BACKUP_DISMISSED_KEY) || '0', 10);
+  const now = Date.now();
+  const dayMs = 86_400_000;
+
+  // Don't show if dismissed within the same interval window
+  if (dismissed && now - dismissed < intervalDays * dayMs) return;
+
+  const daysSinceLast = lastTs ? Math.floor((now - lastTs) / dayMs) : null;
+
+  if (!lastTs || (now - lastTs) >= intervalDays * dayMs) {
+    const text = lastTs
+      ? `Đã ${daysSinceLast} ngày chưa backup dữ liệu.`
+      : 'Bạn chưa backup dữ liệu lần nào.';
+    document.getElementById('backupBannerText').textContent = text;
+    document.getElementById('backupBanner').classList.remove('hidden');
+  }
+}
+
+function dismissBackupBanner() {
+  localStorage.setItem(BACKUP_DISMISSED_KEY, String(Date.now()));
+  document.getElementById('backupBanner').classList.add('hidden');
+}
+
+function saveBackupInterval(val) {
+  localStorage.setItem(BACKUP_INT_KEY, val);
+}
+
+function updateLastBackupInfo() {
+  const ts = parseInt(localStorage.getItem(BACKUP_TS_KEY) || '0', 10);
+  const el = document.getElementById('lastBackupInfo');
+  if (!el) return;
+  if (!ts) {
+    el.textContent = 'Chưa backup lần nào';
+    return;
+  }
+  const days = Math.floor((Date.now() - ts) / 86_400_000);
+  const dateStr = new Date(ts).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  el.textContent = days === 0
+    ? `Backup lần cuối: hôm nay lúc ${new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
+    : `Backup lần cuối: ${days} ngày trước (${dateStr})`;
+}
+
+function syncBackupIntervalUI() {
+  const val = localStorage.getItem(BACKUP_INT_KEY) || '7';
+  const sel = document.getElementById('backupIntervalSelect');
+  if (sel) sel.value = val;
+}
+
+// ================================================================
+// 6. CLAUDE API
+// ================================================================
+async function callClaude(messages, system = null, maxTokens = 1024) {
+  const key = getApiKey();
+  if (!key) { toast('Chưa có API key — vào Settings để thêm'); throw new Error('no_key'); }
+
+  const body = { model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages };
+  if (system) body.system = system;
+
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-allow-browser': 'true'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error(e.error?.message || `HTTP ${r.status}`);
+  }
+  const d = await r.json();
+  return d.content[0].text;
+}
+
+// ================================================================
+// 7. IMAGE UTILITIES
+// ================================================================
+function compressImage(file, maxDim = 1200, quality = 0.82) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width: w, height: h } = img;
+      if (w > maxDim || h > maxDim) {
+        const ratio = Math.min(maxDim / w, maxDim / h);
+        w = Math.round(w * ratio); h = Math.round(h * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => resolve(blob), 'image/jpeg', quality);
+    };
+    img.src = url;
+  });
+}
+
+function blobToBase64(blob) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(blob);
+  });
+}
+
+function base64ToBlob(b64, type = 'image/jpeg') {
+  const bin = atob(b64), arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type });
+}
+
+// ================================================================
+// 8. MEDICINES — CRUD
+// ================================================================
+async function refreshMeds() {
+  allMeds = await dbAll('medicines');
+  allMeds.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  renderMedGrid(allMeds);
+}
+
+function renderMedGrid(list) {
+  const grid = document.getElementById('medGrid');
+  const empty = document.getElementById('medEmpty');
+  const noRes = document.getElementById('medNoResult');
+  const searchVal = document.getElementById('searchInput').value.trim();
+
+  grid.innerHTML = '';
+  empty.classList.add('hidden');
+  noRes.classList.add('hidden');
+
+  if (allMeds.length === 0) { empty.classList.remove('hidden'); return; }
+  if (list.length === 0 && searchVal) { noRes.classList.remove('hidden'); return; }
+
+  list.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden cursor-pointer hover:shadow-md active:scale-95 transition-all';
+    card.onclick = () => openMedDetail(m.id);
+
+    let imgHtml;
+    if (m.image) {
+      const src = URL.createObjectURL(m.image);
+      imgHtml = `<img src="${src}" class="w-full h-36 object-cover" onload="URL.revokeObjectURL(this.src)"/>`;
+    } else {
+      imgHtml = `<div class="w-full h-36 bg-gradient-to-br from-sky-50 to-blue-100 flex items-center justify-center text-5xl">💊</div>`;
+    }
+
+    card.innerHTML = `
+      ${imgHtml}
+      <div class="p-3">
+        <p class="font-semibold text-sm leading-snug clamp2 mb-1">${h(m.name)}</p>
+        <p class="text-xs text-slate-400 clamp2">${h(m.indication || 'Chưa có thông tin')}</p>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// Search
+function handleSearch(q) {
+  if (!q.trim()) { renderMedGrid(allMeds); return; }
+  const lo = q.toLowerCase();
+  renderMedGrid(allMeds.filter(m =>
+    m.name.toLowerCase().includes(lo) ||
+    (m.indication     && m.indication.toLowerCase().includes(lo)) ||
+    (m.active_ingredient && m.active_ingredient.toLowerCase().includes(lo))
+  ));
+}
+
+// Open add/edit modal
+function openMedModal(id) {
+  const isNew = !id;
+  document.getElementById('medModalTitle').textContent = isNew ? '+ Thêm thuốc' : 'Chỉnh sửa thuốc';
+  document.getElementById('medId').value = id || '';
+  ['medName','medIngredient','medIndication','medContra','medNotes'].forEach(f => document.getElementById(f).value = '');
+  medImgBlob = null;
+  resetMedImg();
+
+  if (!isNew) {
+    dbGet('medicines', id).then(m => {
+      if (!m) return;
+      document.getElementById('medName').value        = m.name || '';
+      document.getElementById('medIngredient').value  = m.active_ingredient || '';
+      document.getElementById('medIndication').value  = m.indication || '';
+      document.getElementById('medContra').value      = m.contraindication || '';
+      document.getElementById('medNotes').value       = m.notes || '';
+      if (m.image) {
+        medImgBlob = m.image;
+        showMedImg(URL.createObjectURL(m.image));
+      }
+    });
+  }
+  document.getElementById('medModal').classList.remove('hidden');
+}
+
+function closeMedModal() {
+  document.getElementById('medModal').classList.add('hidden');
+  medImgBlob = null;
+}
+
+async function saveMed() {
+  const name = document.getElementById('medName').value.trim();
+  if (!name) { toast('Vui lòng nhập tên thuốc'); return; }
+
+  const data = {
+    name,
+    image:             medImgBlob || null,
+    active_ingredient: document.getElementById('medIngredient').value.trim(),
+    indication:        document.getElementById('medIndication').value.trim(),
+    contraindication:  document.getElementById('medContra').value.trim(),
+    notes:             document.getElementById('medNotes').value.trim(),
+    created_at:        Date.now()
+  };
+
+  const id = document.getElementById('medId').value;
+  if (id) { data.id = +id; await dbPut('medicines', data); toast('Đã cập nhật thuốc'); }
+  else    { await dbAdd('medicines', data); toast('Đã thêm thuốc'); }
+
+  closeMedModal();
+  await refreshMeds();
+}
+
+async function deleteMed(id) {
+  if (!confirm('Xoá thuốc này?')) return;
+  await dbDel('medicines', id);
+  closeMedDetail();
+  await refreshMeds();
+  toast('Đã xoá thuốc');
+}
+
+// Medicine image helpers
+async function onMedImgSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  medImgBlob = await compressImage(file);
+  showMedImg(URL.createObjectURL(medImgBlob));
+}
+function showMedImg(src) {
+  document.getElementById('medImgPlaceholder').classList.add('hidden');
+  const img = document.getElementById('medImgPreview');
+  img.src = src; img.classList.remove('hidden');
+  document.getElementById('medImgRemoveBtn').classList.remove('hidden');
+  document.getElementById('ocrMedBtn').classList.remove('hidden');
+}
+function resetMedImg() {
+  document.getElementById('medImgPlaceholder').classList.remove('hidden');
+  document.getElementById('medImgPreview').classList.add('hidden');
+  document.getElementById('medImgPreview').src = '';
+  document.getElementById('medImgRemoveBtn').classList.add('hidden');
+  document.getElementById('ocrMedBtn').classList.add('hidden');
+  document.getElementById('medImgInput').value = '';
+}
+function removeMedImg() { medImgBlob = null; resetMedImg(); }
+
+// ================================================================
+// 9. MEDICINE DETAIL
+// ================================================================
+async function openMedDetail(id) {
+  const m = await dbGet('medicines', id);
+  if (!m) return;
+
+  let imgHtml;
+  if (m.image) {
+    const src = URL.createObjectURL(m.image);
+    imgHtml = `<img src="${src}" class="w-full h-52 object-cover rounded-t-2xl" onload="URL.revokeObjectURL(this.src)"/>`;
+  } else {
+    imgHtml = `<div class="w-full h-52 bg-gradient-to-br from-sky-50 to-blue-100 flex items-center justify-center text-7xl rounded-t-2xl">💊</div>`;
+  }
+
+  const badge = (color, icon, label, val) => val ? `
+    <div class="bg-${color}-50 rounded-xl p-3">
+      <p class="text-xs font-bold text-${color}-600 uppercase tracking-wide mb-1">${icon} ${label}</p>
+      <p class="text-sm text-slate-700 whitespace-pre-wrap">${h(val)}</p>
+    </div>` : '';
+
+  document.getElementById('medDetailContent').innerHTML = `
+    ${imgHtml}
+    <div class="px-5 py-4 space-y-3">
+      <div class="flex items-start justify-between gap-2">
+        <h2 class="text-xl font-bold flex-1">${h(m.name)}</h2>
+        <button onclick="closeMedDetail()" class="text-slate-400 hover:text-slate-600 text-3xl leading-none flex-shrink-0">&times;</button>
+      </div>
+      ${badge('slate', '🔬', 'Hoạt chất', m.active_ingredient)}
+      ${badge('green', '✅', 'Chỉ định',  m.indication)}
+      ${badge('red',   '⚠️', 'Chống chỉ định', m.contraindication)}
+      ${badge('amber', '📝', 'Ghi chú',   m.notes)}
+      <p class="text-xs text-slate-400">Thêm: ${new Date(m.created_at).toLocaleDateString('vi-VN')}</p>
+    </div>
+    <div class="sticky bottom-0 bg-white px-5 py-4 border-t border-slate-100 flex gap-2 safe-bottom">
+      <button onclick="deleteMed(${m.id})" class="flex-1 py-3 border border-red-200 text-red-500 rounded-xl text-sm hover:bg-red-50 transition">🗑 Xoá</button>
+      <button onclick="closeMedDetail();openMedModal(${m.id})" class="flex-1 py-3 bg-sky-600 text-white rounded-xl text-sm font-bold hover:bg-sky-700 transition">✏️ Sửa</button>
+    </div>
+  `;
+  document.getElementById('medDetailModal').classList.remove('hidden');
+}
+function closeMedDetail() {
+  document.getElementById('medDetailModal').classList.add('hidden');
+}
+
+// ================================================================
+// 10. AI: AUTO-FILL MEDICINE INFO
+// ================================================================
+async function aiFillMed() {
+  const name = document.getElementById('medName').value.trim();
+  if (!name) { toast('Nhập tên thuốc trước'); return; }
+
+  setLoading('medAiLoading', true);
+  document.getElementById('aiFillBtn').disabled = true;
+  try {
+    const text = await callClaude([{
+      role: 'user',
+      content: `Thuốc "${name}" có hoạt chất gì, chỉ định và chống chỉ định chính là gì? Trả lời ONLY JSON không có markdown: {"active_ingredient":"...","indication":"...","contraindication":"..."}`
+    }]);
+
+    // Strip possible markdown code fences
+    const clean = text.replace(/```[a-z]*\n?/gi, '').trim();
+    const json = JSON.parse(clean);
+    if (json.active_ingredient) document.getElementById('medIngredient').value = json.active_ingredient;
+    if (json.indication)        document.getElementById('medIndication').value  = json.indication;
+    if (json.contraindication)  document.getElementById('medContra').value      = json.contraindication;
+    toast('✅ Đã điền thông tin từ AI');
+  } catch (e) {
+    if (e.message !== 'no_key') toast('Lỗi AI: ' + e.message);
+  } finally {
+    setLoading('medAiLoading', false);
+    document.getElementById('aiFillBtn').disabled = false;
+  }
+}
+
+// ================================================================
+// 11. OCR — MEDICINE IMAGE
+// ================================================================
+async function ocrMedImage() {
+  if (!medImgBlob) { toast('Chọn ảnh trước'); return; }
+  setLoading('medAiLoading', true);
+  document.getElementById('ocrMedBtn').disabled = true;
+  try {
+    const b64 = await blobToBase64(medImgBlob);
+    const text = await callClaude([{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
+        { type: 'text', text: 'Đọc tên thuốc trong ảnh này. Trả về ONLY JSON không markdown: {"medicines":["tên 1","tên 2"]}' }
+      ]
+    }]);
+
+    const clean = text.replace(/```[a-z]*\n?/gi, '').trim();
+    const json = JSON.parse(clean);
+    if (json.medicines?.length) {
+      document.getElementById('medName').value = json.medicines[0];
+      toast(json.medicines.length > 1 ? `Tìm thấy: ${json.medicines.join(', ')}` : '✅ Đã nhận dạng tên thuốc');
+    } else {
+      toast('Không đọc được tên thuốc từ ảnh');
+    }
+  } catch (e) {
+    if (e.message !== 'no_key') toast('Lỗi OCR: ' + e.message);
+  } finally {
+    setLoading('medAiLoading', false);
+    document.getElementById('ocrMedBtn').disabled = false;
+  }
+}
+
+// ================================================================
+// 12. PRESCRIPTIONS — CRUD
+// ================================================================
+async function refreshRx() {
+  const rxs = await dbAll('prescriptions');
+  rxs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  renderRxList(rxs);
+}
+
+function renderRxList(rxs) {
+  const list  = document.getElementById('rxList');
+  const empty = document.getElementById('rxEmpty');
+  list.innerHTML = '';
+
+  if (!rxs.length) { empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+
+  rxs.forEach(rx => {
+    const card = document.createElement('div');
+    card.className = 'bg-white rounded-2xl border border-slate-100 shadow-sm p-4 cursor-pointer hover:shadow-md active:scale-[0.99] transition-all';
+    card.onclick = () => openRxDetail(rx.id);
+    card.innerHTML = `
+      <div class="flex items-start gap-3">
+        <span class="text-3xl mt-0.5">📋</span>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold">${h(rx.patient || 'Không rõ')}</p>
+          <p class="text-sm text-slate-500 mt-0.5">
+            ${rx.date ? new Date(rx.date).toLocaleDateString('vi-VN') : 'Chưa rõ ngày'}
+            ${rx.doctor ? ' · BS. ' + h(rx.doctor) : ''}
+          </p>
+          ${rx.hospital ? `<p class="text-xs text-slate-400 truncate mt-0.5">${h(rx.hospital)}</p>` : ''}
+        </div>
+        <span class="text-slate-300 text-xl">›</span>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function openRxModal(id) {
+  document.getElementById('rxModalTitle').textContent = id ? 'Chỉnh sửa toa' : '+ Thêm toa thuốc';
+  document.getElementById('rxId').value = id || '';
+  ['rxPatient','rxDoctor','rxHospital','rxNotes'].forEach(f => document.getElementById(f).value = '');
+  document.getElementById('rxDate').value = new Date().toISOString().slice(0, 10);
+  rxImgBlob = null;
+  resetRxImg();
+  document.getElementById('rxItemsContainer').innerHTML = '';
+  addRxItem(); // start with one blank row
+
+  if (id) {
+    Promise.all([dbGet('prescriptions', id), dbIdx('rx_items', 'rx_id', id)]).then(([rx, items]) => {
+      if (!rx) return;
+      document.getElementById('rxPatient').value  = rx.patient  || '';
+      document.getElementById('rxDate').value     = rx.date     || '';
+      document.getElementById('rxDoctor').value   = rx.doctor   || '';
+      document.getElementById('rxHospital').value = rx.hospital || '';
+      document.getElementById('rxNotes').value    = rx.notes    || '';
+      if (rx.image) { rxImgBlob = rx.image; showRxImg(URL.createObjectURL(rx.image)); }
+
+      if (items.length) {
+        document.getElementById('rxItemsContainer').innerHTML = '';
+        items.forEach(it => addRxItem(it.name, it.dosage, it.duration, it.instructions));
+      }
+    });
+  }
+  document.getElementById('rxModal').classList.remove('hidden');
+}
+function closeRxModal() { document.getElementById('rxModal').classList.add('hidden'); rxImgBlob = null; }
+
+function addRxItem(name = '', dosage = '', duration = '', instructions = '') {
+  const idx = document.getElementById('rxItemsContainer').children.length + 1;
+  const div = document.createElement('div');
+  div.className = 'bg-slate-50 rounded-2xl p-3 space-y-2';
+  div.innerHTML = `
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-bold text-slate-400 uppercase">Thuốc ${idx}</span>
+      <button type="button" onclick="this.closest('.bg-slate-50').remove()" class="text-slate-400 hover:text-red-400 text-2xl leading-none">×</button>
+    </div>
+    <input type="text" placeholder="Tên thuốc *" value="${a(name)}" class="rx-name w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+    <div class="grid grid-cols-2 gap-2">
+      <input type="text" placeholder="Liều dùng" value="${a(dosage)}"   class="rx-dosage px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+      <input type="text" placeholder="Thời gian"  value="${a(duration)}" class="rx-duration px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+    </div>
+    <input type="text" placeholder="Cách dùng (sáng/trưa/tối...)" value="${a(instructions)}" class="rx-instructions w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+  `;
+  document.getElementById('rxItemsContainer').appendChild(div);
+}
+
+async function saveRx() {
+  const patient = document.getElementById('rxPatient').value.trim();
+  if (!patient) { toast('Nhập tên bệnh nhân'); return; }
+
+  const items = [...document.getElementById('rxItemsContainer').querySelectorAll('.bg-slate-50')]
+    .map(el => ({
+      name:         el.querySelector('.rx-name')?.value.trim() || '',
+      dosage:       el.querySelector('.rx-dosage')?.value.trim() || '',
+      duration:     el.querySelector('.rx-duration')?.value.trim() || '',
+      instructions: el.querySelector('.rx-instructions')?.value.trim() || ''
+    }))
+    .filter(it => it.name);
+
+  const rxData = {
+    patient,
+    date:     document.getElementById('rxDate').value,
+    doctor:   document.getElementById('rxDoctor').value.trim(),
+    hospital: document.getElementById('rxHospital').value.trim(),
+    notes:    document.getElementById('rxNotes').value.trim(),
+    image:    rxImgBlob || null,
+    created_at: Date.now()
+  };
+
+  const existId = document.getElementById('rxId').value;
+  let rxId;
+  if (existId) {
+    rxData.id = +existId; rxId = +existId;
+    await dbPut('prescriptions', rxData);
+    const old = await dbIdx('rx_items', 'rx_id', rxId);
+    await Promise.all(old.map(it => dbDel('rx_items', it.id)));
+  } else {
+    rxId = await dbAdd('prescriptions', rxData);
+  }
+
+  await Promise.all(items.map(it => dbAdd('rx_items', { ...it, rx_id: rxId })));
+  closeRxModal();
+  await refreshRx();
+  toast('Đã lưu toa thuốc');
+}
+
+async function deleteRx(id) {
+  if (!confirm('Xoá toa thuốc này?')) return;
+  const old = await dbIdx('rx_items', 'rx_id', id);
+  await Promise.all(old.map(it => dbDel('rx_items', it.id)));
+  await dbDel('prescriptions', id);
+  closeRxDetail();
+  await refreshRx();
+  toast('Đã xoá toa thuốc');
+}
+
+// Rx image helpers
+async function onRxImgSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  rxImgBlob = await compressImage(file);
+  showRxImg(URL.createObjectURL(rxImgBlob));
+}
+function showRxImg(src) {
+  document.getElementById('rxImgPlaceholder').classList.add('hidden');
+  const img = document.getElementById('rxImgPreview');
+  img.src = src; img.classList.remove('hidden');
+  document.getElementById('rxImgRemoveBtn').classList.remove('hidden');
+  document.getElementById('ocrRxBtn').classList.remove('hidden');
+}
+function resetRxImg() {
+  document.getElementById('rxImgPlaceholder').classList.remove('hidden');
+  document.getElementById('rxImgPreview').classList.add('hidden');
+  document.getElementById('rxImgPreview').src = '';
+  document.getElementById('rxImgRemoveBtn').classList.add('hidden');
+  document.getElementById('ocrRxBtn').classList.add('hidden');
+  document.getElementById('rxImgInput').value = '';
+}
+function removeRxImg() { rxImgBlob = null; resetRxImg(); }
+
+// ================================================================
+// 13. OCR — PRESCRIPTION IMAGE
+// ================================================================
+async function ocrRxImage() {
+  if (!rxImgBlob) { toast('Chọn ảnh toa trước'); return; }
+  setLoading('rxOcrLoading', true);
+  document.getElementById('ocrRxBtn').disabled = true;
+
+  try {
+    const b64 = await blobToBase64(rxImgBlob);
+    const text = await callClaude([{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
+        { type: 'text', text: 'Đây là ảnh toa thuốc. Đọc và trả về ONLY JSON không markdown: {"patient":"...","doctor":"...","medicines":[{"name":"...","dosage":"...","duration":"...","instructions":"..."}]}' }
+      ]
+    }], null, 2048);
+
+    const clean = text.replace(/```[a-z]*\n?/gi, '').trim();
+    const json = JSON.parse(clean);
+    if (json.patient) document.getElementById('rxPatient').value = json.patient;
+    if (json.doctor)  document.getElementById('rxDoctor').value  = json.doctor;
+    if (json.medicines?.length) {
+      document.getElementById('rxItemsContainer').innerHTML = '';
+      json.medicines.forEach(m => addRxItem(m.name, m.dosage, m.duration, m.instructions));
+      toast(`✅ Nhận dạng ${json.medicines.length} thuốc từ toa`);
+    }
+  } catch (e) {
+    if (e.message !== 'no_key') toast('Lỗi OCR toa: ' + e.message);
+  } finally {
+    setLoading('rxOcrLoading', false);
+    document.getElementById('ocrRxBtn').disabled = false;
+  }
+}
+
+// ================================================================
+// 14. PRESCRIPTION DETAIL
+// ================================================================
+async function openRxDetail(id) {
+  const [rx, items] = await Promise.all([dbGet('prescriptions', id), dbIdx('rx_items', 'rx_id', id)]);
+  if (!rx) return;
+
+  let imgHtml = '';
+  if (rx.image) {
+    const src = URL.createObjectURL(rx.image);
+    imgHtml = `<img src="${src}" class="w-full h-48 object-cover rounded-t-2xl" onload="URL.revokeObjectURL(this.src)"/>`;
+  }
+
+  const itemsHtml = items.length
+    ? items.map(it => `
+        <div class="bg-slate-50 rounded-xl p-3 space-y-0.5">
+          <p class="font-semibold text-sm">${h(it.name)}</p>
+          ${it.dosage       ? `<p class="text-xs text-slate-500">Liều: ${h(it.dosage)}</p>` : ''}
+          ${it.duration     ? `<p class="text-xs text-slate-500">Thời gian: ${h(it.duration)}</p>` : ''}
+          ${it.instructions ? `<p class="text-xs text-slate-500">Cách dùng: ${h(it.instructions)}</p>` : ''}
+        </div>`).join('')
+    : '<p class="text-sm text-slate-400">Chưa có danh sách thuốc</p>';
+
+  document.getElementById('rxDetailContent').innerHTML = `
+    ${imgHtml}
+    <div class="px-5 py-4 space-y-3">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex-1">
+          <h2 class="text-xl font-bold">${h(rx.patient || 'Không rõ')}</h2>
+          <p class="text-sm text-slate-500 mt-0.5">
+            ${rx.date ? new Date(rx.date).toLocaleDateString('vi-VN') : ''}
+            ${rx.doctor ? ' · BS. ' + h(rx.doctor) : ''}
+          </p>
+          ${rx.hospital ? `<p class="text-xs text-slate-400">${h(rx.hospital)}</p>` : ''}
+        </div>
+        <button onclick="closeRxDetail()" class="text-slate-400 hover:text-slate-600 text-3xl leading-none">&times;</button>
+      </div>
+      ${rx.notes ? `<div class="bg-amber-50 rounded-xl p-3"><p class="text-xs font-bold text-amber-600 uppercase mb-1">📝 Ghi chú</p><p class="text-sm">${h(rx.notes)}</p></div>` : ''}
+      <div>
+        <p class="text-xs font-bold text-slate-400 uppercase mb-2">Thuốc trong toa (${items.length})</p>
+        <div class="space-y-2">${itemsHtml}</div>
+      </div>
+    </div>
+    <div class="sticky bottom-0 bg-white px-5 py-4 border-t border-slate-100 flex gap-2 safe-bottom">
+      <button onclick="deleteRx(${rx.id})" class="flex-1 py-3 border border-red-200 text-red-500 rounded-xl text-sm hover:bg-red-50 transition">🗑 Xoá</button>
+      <button onclick="closeRxDetail();openRxModal(${rx.id})" class="flex-1 py-3 bg-sky-600 text-white rounded-xl text-sm font-bold hover:bg-sky-700 transition">✏️ Sửa</button>
+    </div>
+  `;
+  document.getElementById('rxDetailModal').classList.remove('hidden');
+}
+function closeRxDetail() { document.getElementById('rxDetailModal').classList.add('hidden'); }
+
+// ================================================================
+// 15. CHAT
+// ================================================================
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  if (!getApiKey()) { toast('Chưa có API key — vào Settings để thêm'); return; }
+
+  input.value = ''; input.style.height = '';
+  appendChat('user', msg);
+  chatHistory.push({ role: 'user', content: msg });
+
+  const btn = document.getElementById('chatSendBtn');
+  btn.disabled = true; btn.textContent = '...';
+
+  const thinkId = appendChat('assistant', '⟳ Đang trả lời...');
+
+  try {
+    const medCtx = allMeds.length
+      ? `Tủ thuốc gia đình hiện có ${allMeds.length} loại: ${allMeds.map(m => m.name).join(', ')}.`
+      : 'Tủ thuốc gia đình hiện chưa có thuốc nào.';
+
+    const system = `Bạn là trợ lý y tế gia đình thân thiện. ${medCtx} Trả lời bằng tiếng Việt, ngắn gọn, dễ hiểu. Luôn nhắc tham khảo bác sĩ cho quyết định y tế quan trọng.`;
+
+    const text = await callClaude([...chatHistory], system, 1024);
+    chatHistory.push({ role: 'assistant', content: text });
+
+    const el = document.getElementById(thinkId);
+    if (el) el.querySelector('.chat-bubble').textContent = text;
+  } catch (e) {
+    const el = document.getElementById(thinkId);
+    if (el) el.querySelector('.chat-bubble').textContent = e.message === 'no_key' ? '⚠️ Cần API key' : 'Lỗi: ' + e.message;
+    chatHistory.pop(); // remove failed user message
+  } finally {
+    btn.disabled = false; btn.textContent = 'Gửi';
+  }
+}
+
+function appendChat(role, text) {
+  const id = 'cm' + Date.now() + Math.random().toString(36).slice(2,6);
+  const box = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.id = id;
+  div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+  div.innerHTML = `<div class="chat-bubble max-w-[82%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words
+    ${role === 'user' ? 'bg-sky-600 text-white rounded-tr-sm' : 'bg-slate-100 text-slate-800 rounded-tl-sm'}">${h(text)}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return id;
+}
+
+function autoResizeTextarea(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+// ================================================================
+// 16. EXPORT / IMPORT
+// ================================================================
+async function exportData() {
+  const [meds, rxs, rxItems] = await Promise.all([
+    dbAll('medicines'), dbAll('prescriptions'), dbAll('rx_items')
+  ]);
+
+  const medsExp = await Promise.all(meds.map(async m => ({
+    ...m, image: m.image ? await blobToBase64(m.image) : null, image_type: m.image?.type || null
+  })));
+  const rxsExp = await Promise.all(rxs.map(async rx => ({
+    ...rx, image: rx.image ? await blobToBase64(rx.image) : null, image_type: rx.image?.type || null
+  })));
+
+  const blob = new Blob([JSON.stringify({ version: 2, exported_at: new Date().toISOString(), medicines: medsExp, prescriptions: rxsExp, rx_items: rxItems }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tuthuoc-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+
+  // Record backup timestamp and hide reminder banner
+  localStorage.setItem(BACKUP_TS_KEY, String(Date.now()));
+  localStorage.removeItem(BACKUP_DISMISSED_KEY);
+  document.getElementById('backupBanner').classList.add('hidden');
+  updateLastBackupInfo();
+  toast('✅ Đã xuất dữ liệu');
+}
+
+async function importData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  try {
+    const raw = JSON.parse(await file.text());
+    if (!raw.medicines) { toast('File không hợp lệ'); return; }
+    if (!confirm(`Nhập ${raw.medicines.length} thuốc và ${(raw.prescriptions||[]).length} toa? Dữ liệu cũ sẽ bị xoá.`)) return;
+
+    // Clear all
+    for (const store of ['medicines','prescriptions','rx_items']) {
+      const all = await dbAll(store);
+      await Promise.all(all.map(it => dbDel(store, it.id)));
+    }
+
+    // Medicines
+    for (const m of raw.medicines) {
+      const entry = { ...m };
+      entry.image = m.image ? base64ToBlob(m.image, m.image_type || 'image/jpeg') : null;
+      delete entry.image_type; delete entry.id;
+      await dbAdd('medicines', entry);
+    }
+
+    // Prescriptions + items (remap IDs)
+    const idMap = {};
+    for (const rx of (raw.prescriptions || [])) {
+      const entry = { ...rx };
+      const old = entry.id;
+      entry.image = rx.image ? base64ToBlob(rx.image, rx.image_type || 'image/jpeg') : null;
+      delete entry.image_type; delete entry.id;
+      idMap[old] = await dbAdd('prescriptions', entry);
+    }
+    for (const it of (raw.rx_items || [])) {
+      const entry = { ...it };
+      entry.rx_id = idMap[it.rx_id] ?? it.rx_id;
+      delete entry.id;
+      await dbAdd('rx_items', entry);
+    }
+
+    await refreshMeds(); await refreshRx();
+    closeSettings();
+    toast('✅ Đã nhập dữ liệu thành công');
+  } catch (e) {
+    toast('Lỗi nhập: ' + e.message);
+  }
+}
+
+// ================================================================
+// 17. PWA
+// ================================================================
+function initPWA() {
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    pwaPrompt = e;
+    document.getElementById('pwaInstallBtn').classList.remove('hidden');
+    document.getElementById('pwaNote').classList.add('hidden');
+  });
+  window.addEventListener('appinstalled', () => {
+    pwaPrompt = null;
+    document.getElementById('pwaInstallBtn').classList.add('hidden');
+  });
+}
+
+async function installPWA() {
+  if (!pwaPrompt) return;
+  pwaPrompt.prompt();
+  const { outcome } = await pwaPrompt.userChoice;
+  if (outcome === 'accepted') {
+    pwaPrompt = null;
+    document.getElementById('pwaInstallBtn').classList.add('hidden');
+    toast('✅ Đã thêm vào Home Screen');
+  }
+}
+
+// ================================================================
+// 18. UTILITIES
+// ================================================================
+function h(s) { // HTML escape
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function a(s) { // attribute escape
+  if (s == null) return '';
+  return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+let _toastTimer;
+function toast(msg, ms = 2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.add('hidden'), ms);
+}
+
+function setLoading(id, on) {
+  document.getElementById(id).classList.toggle('hidden', !on);
+}
+
+// ================================================================
+// BOOT
+// ================================================================
+boot();
+</script>
+</body>
+</html>
