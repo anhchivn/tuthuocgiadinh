@@ -548,16 +548,16 @@ async function testAPIConnection() {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-sonnet-4-6',
         max_tokens: 10,
         messages: [{ role: 'user', content: 'Hi' }]
       })
     });
     const d = await r.json();
-    if (r.ok) {
-      alert('✅ Kết nối OK!\nProxy: ' + CLAUDE_ENDPOINT + '\nModel: ' + d.model);
+    if (r.ok && d.model) {
+      alert('✅ Kết nối OK!\nModel: ' + d.model);
     } else {
-      alert('❌ HTTP ' + r.status + '\n' + (d.error?.message || JSON.stringify(d)));
+      alert('❌ HTTP ' + r.status + '\n' + JSON.stringify(d, null, 2).slice(0, 600));
     }
   } catch (e) {
     alert('❌ Lỗi:\n' + e.name + ': ' + e.message);
