@@ -1,4 +1,4 @@
-const CACHE = 'tuthuoc-v2';
+const CACHE = 'tuthuoc-v4';
 const SHELL = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {

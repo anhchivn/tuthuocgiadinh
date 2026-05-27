@@ -553,16 +553,22 @@ async function testAPIConnection() {
   const key = document.getElementById('apiKeyInput').value.trim() || getApiKey();
   if (!key) { alert('Chưa có API key'); return; }
 
-  toast('Đang test...');
+  const proxyUrl = document.getElementById('proxyUrlInput').value.trim().replace(/\/$/, '')
+                   || localStorage.getItem('anthropic_proxy_url') || '';
+  const endpoint = proxyUrl || 'https://api.anthropic.com/v1/messages';
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': key,
+    'anthropic-version': '2023-06-01',
+  };
+  if (!proxyUrl) headers['anthropic-dangerous-allow-browser'] = 'true';
+
+  toast('Đang test' + (proxyUrl ? ' qua proxy...' : ' trực tiếp...'));
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-allow-browser': 'true'
-      },
+      headers,
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 10,
@@ -571,12 +577,12 @@ async function testAPIConnection() {
     });
     const d = await r.json();
     if (r.ok) {
-      alert('✅ Kết nối OK!\nModel: ' + d.model);
+      alert('✅ Kết nối OK!\n' + (proxyUrl ? 'Qua proxy: ' + proxyUrl : 'Trực tiếp') + '\nModel: ' + d.model);
     } else {
-      alert('❌ Lỗi HTTP ' + r.status + '\n' + (d.error?.message || JSON.stringify(d)));
+      alert('❌ HTTP ' + r.status + '\n' + (d.error?.message || JSON.stringify(d)));
     }
   } catch (e) {
-    alert('❌ Lỗi kết nối:\n' + e.name + ': ' + e.message + (e.cause ? '\nCause: ' + JSON.stringify(e.cause) : ''));
+    alert('❌ Lỗi:\n' + e.name + ': ' + e.message);
   }
 }
 
