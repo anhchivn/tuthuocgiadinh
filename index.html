@@ -190,16 +190,6 @@
       </div>
       <p class="text-xs text-slate-400 mt-1">Lưu trong localStorage, không bao giờ lên GitHub</p>
 
-      <label class="block text-sm font-semibold text-slate-700 mb-1 mt-3">Proxy URL <span class="text-slate-400 font-normal">(nếu dùng Cloudflare Worker)</span></label>
-      <div class="flex gap-2">
-        <input type="text" id="proxyUrlInput" placeholder="https://....workers.dev"
-          class="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
-        <button onclick="document.getElementById('proxyUrlInput').value=''" type="button"
-          class="px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-400 hover:text-red-500 hover:border-red-200 transition-colors">
-          Xóa
-        </button>
-      </div>
-      <p class="text-xs text-slate-400 mt-1">Để trống nếu gọi thẳng Anthropic API</p>
     </div>
 
     <div>
@@ -527,8 +517,7 @@ function switchTab(tab) {
 // 5. SETTINGS
 // ================================================================
 function openSettings() {
-  document.getElementById('apiKeyInput').value   = localStorage.getItem('anthropic_api_key') || '';
-  document.getElementById('proxyUrlInput').value = localStorage.getItem('anthropic_proxy_url') || '';
+  document.getElementById('apiKeyInput').value = localStorage.getItem('anthropic_api_key') || '';
   updateLastBackupInfo();
   syncBackupIntervalUI();
   document.getElementById('settingsModal').classList.remove('hidden');
@@ -541,10 +530,6 @@ function saveSettings() {
   if (k) localStorage.setItem('anthropic_api_key', k);
   else   localStorage.removeItem('anthropic_api_key');
 
-  const p = document.getElementById('proxyUrlInput').value.trim().replace(/\/$/, '');
-  if (p) localStorage.setItem('anthropic_proxy_url', p);
-  else   localStorage.removeItem('anthropic_proxy_url');
-
   checkApiKey();
   closeSettings();
   toast('Đã lưu cài đặt');
@@ -553,22 +538,15 @@ async function testAPIConnection() {
   const key = document.getElementById('apiKeyInput').value.trim() || getApiKey();
   if (!key) { alert('Chưa có API key'); return; }
 
-  const proxyUrl = document.getElementById('proxyUrlInput').value.trim().replace(/\/$/, '')
-                   || localStorage.getItem('anthropic_proxy_url') || '';
-  const endpoint = proxyUrl || 'https://api.anthropic.com/v1/messages';
-
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-api-key': key,
-    'anthropic-version': '2023-06-01',
-  };
-  if (!proxyUrl) headers['anthropic-dangerous-allow-browser'] = 'true';
-
-  toast('Đang test' + (proxyUrl ? ' qua proxy...' : ' trực tiếp...'));
+  toast('Đang test qua proxy...');
   try {
-    const r = await fetch(endpoint, {
+    const r = await fetch(CLAUDE_ENDPOINT, {
       method: 'POST',
-      headers,
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+      },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 10,
@@ -577,7 +555,7 @@ async function testAPIConnection() {
     });
     const d = await r.json();
     if (r.ok) {
-      alert('✅ Kết nối OK!\n' + (proxyUrl ? 'Qua proxy: ' + proxyUrl : 'Trực tiếp') + '\nModel: ' + d.model);
+      alert('✅ Kết nối OK!\nProxy: ' + CLAUDE_ENDPOINT + '\nModel: ' + d.model);
     } else {
       alert('❌ HTTP ' + r.status + '\n' + (d.error?.message || JSON.stringify(d)));
     }
@@ -655,27 +633,22 @@ function syncBackupIntervalUI() {
 // ================================================================
 // 6. CLAUDE API
 // ================================================================
+const CLAUDE_ENDPOINT = 'https://tuthuoc.nguyenanhchi.workers.dev';
+
 async function callClaude(messages, system = null, maxTokens = 1024) {
   const key = getApiKey();
   if (!key) { toast('Chưa có API key — vào Settings để thêm'); throw new Error('no_key'); }
 
-  const proxyUrl = localStorage.getItem('anthropic_proxy_url');
-  const endpoint = proxyUrl || 'https://api.anthropic.com/v1/messages';
-
   const body = { model: 'claude-sonnet-4-6', max_tokens: maxTokens, messages };
   if (system) body.system = system;
 
-  // Khi dùng proxy: không cần anthropic-dangerous-allow-browser (worker tự thêm)
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-api-key': key,
-    'anthropic-version': '2023-06-01',
-  };
-  if (!proxyUrl) headers['anthropic-dangerous-allow-browser'] = 'true';
-
-  const r = await fetch(endpoint, {
+  const r = await fetch(CLAUDE_ENDPOINT, {
     method: 'POST',
-    headers,
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+    },
     body: JSON.stringify(body)
   });
 
