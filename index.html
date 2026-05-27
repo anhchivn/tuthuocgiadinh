@@ -595,7 +595,7 @@ async function callClaude(messages, system = null, maxTokens = 1024) {
   const key = getApiKey();
   if (!key) { toast('Chưa có API key — vào Settings để thêm'); throw new Error('no_key'); }
 
-  const body = { model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages };
+  const body = { model: 'claude-sonnet-4-6', max_tokens: maxTokens, messages };
   if (system) body.system = system;
 
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -857,9 +857,7 @@ async function aiFillMed() {
       content: `Thuốc "${name}" có hoạt chất gì, chỉ định và chống chỉ định chính là gì? Trả lời ONLY JSON không có markdown: {"active_ingredient":"...","indication":"...","contraindication":"..."}`
     }]);
 
-    // Strip possible markdown code fences
-    const clean = text.replace(/```[a-z]*\n?/gi, '').trim();
-    const json = JSON.parse(clean);
+    const json = extractJSON(text);
     if (json.active_ingredient) document.getElementById('medIngredient').value = json.active_ingredient;
     if (json.indication)        document.getElementById('medIndication').value  = json.indication;
     if (json.contraindication)  document.getElementById('medContra').value      = json.contraindication;
@@ -889,8 +887,7 @@ async function ocrMedImage() {
       ]
     }]);
 
-    const clean = text.replace(/```[a-z]*\n?/gi, '').trim();
-    const json = JSON.parse(clean);
+    const json = extractJSON(text);
     if (json.medicines?.length) {
       document.getElementById('medName').value = json.medicines[0];
       toast(json.medicines.length > 1 ? `Tìm thấy: ${json.medicines.join(', ')}` : '✅ Đã nhận dạng tên thuốc');
@@ -1085,8 +1082,7 @@ async function ocrRxImage() {
       ]
     }], null, 2048);
 
-    const clean = text.replace(/```[a-z]*\n?/gi, '').trim();
-    const json = JSON.parse(clean);
+    const json = extractJSON(text);
     if (json.patient) document.getElementById('rxPatient').value = json.patient;
     if (json.doctor)  document.getElementById('rxDoctor').value  = json.doctor;
     if (json.medicines?.length) {
@@ -1318,6 +1314,19 @@ async function installPWA() {
 // ================================================================
 // 18. UTILITIES
 // ================================================================
+// Extract the first valid JSON object from a string (handles extra text around JSON)
+function extractJSON(text) {
+  // Try direct parse first
+  try { return JSON.parse(text.trim()); } catch {}
+  // Find outermost { ... }
+  const start = text.indexOf('{');
+  const end   = text.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
+  }
+  throw new Error('Không đọc được JSON từ phản hồi AI');
+}
+
 function h(s) { // HTML escape
   if (s == null) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
