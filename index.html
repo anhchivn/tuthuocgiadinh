@@ -39,6 +39,14 @@
 
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+
+    /* Print: chỉ hiện printArea, ẩn mọi thứ khác */
+    @media print {
+      body > *:not(#printArea) { display: none !important; }
+      #printArea { display: block !important; }
+      @page { margin: 15mm; }
+    }
+    #printArea { display: none; }
   </style>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800 select-none">
@@ -96,6 +104,10 @@
       class="flex-1 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">
       💬 Chat AI
     </button>
+    <button id="tab-btn-shop" onclick="switchTab('shop')"
+      class="flex-1 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">
+      🛒 Mua
+    </button>
   </div>
 </nav>
 
@@ -133,6 +145,28 @@
     </div>
   </div>
 
+  <!-- ===== TAB: SHOPPING LIST ===== -->
+  <div id="tab-shop" class="tab-content">
+    <div class="mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-sm text-slate-500">Chọn thuốc cần mua từ kho</p>
+        <button id="shopClearBtn" onclick="clearShopSelection()" class="hidden text-xs text-red-400 hover:text-red-600 font-semibold">Xóa chọn</button>
+      </div>
+      <div class="relative mb-3">
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">🔍</span>
+        <input type="search" id="shopSearchInput" placeholder="Tìm thuốc trong kho..."
+          oninput="renderShopTab(this.value)"
+          class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+      </div>
+      <div id="shopMedList" class="space-y-2"></div>
+      <div id="shopEmpty" class="hidden text-center py-20 text-slate-400">
+        <div class="text-5xl mb-3">💊</div>
+        <p class="text-lg font-semibold">Chưa có thuốc trong kho</p>
+        <p class="text-sm mt-1">Thêm thuốc ở tab Thuốc trước</p>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== TAB: CHAT ===== -->
   <div id="tab-chat" class="tab-content">
     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden"
@@ -167,6 +201,12 @@
   <button onclick="openRxModal(null)"
     class="bg-sky-600 text-white rounded-2xl shadow-lg px-5 py-3 font-bold hover:bg-sky-700 active:scale-95 transition flex items-center gap-2">
     <span class="text-xl leading-none">+</span> Thêm toa
+  </button>
+</div>
+<div id="fab-shop" class="fixed bottom-6 right-4 z-20 hidden">
+  <button id="shopFabBtn" onclick="openShopPreview()"
+    class="bg-emerald-600 text-white rounded-2xl shadow-lg px-5 py-3 font-bold hover:bg-emerald-700 active:scale-95 transition flex items-center gap-2">
+    📋 Tạo danh sách
   </button>
 </div>
 
@@ -414,9 +454,29 @@
   </div>
 </div>
 
+<!-- ===================== MODAL: SHOPPING LIST PREVIEW ===================== -->
+<div id="shopPreviewModal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onclick="if(event.target===this)closeShopPreview()">
+  <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[93dvh] overflow-y-auto flex flex-col">
+    <div class="sticky top-0 bg-white rounded-t-2xl px-5 pt-5 pb-3 border-b border-slate-100 flex items-center justify-between z-10">
+      <h2 class="font-bold text-base">📋 Danh sách mua thuốc</h2>
+      <button onclick="closeShopPreview()" class="text-slate-400 hover:text-slate-600 text-3xl leading-none">&times;</button>
+    </div>
+    <div class="px-5 py-4 flex-1 overflow-y-auto" id="shopPreviewContent"></div>
+    <div class="sticky bottom-0 bg-white px-5 py-4 border-t border-slate-100 flex gap-2 safe-bottom">
+      <button onclick="shareShopListText()" class="flex-1 py-3 border border-slate-200 rounded-xl text-sm hover:bg-slate-50 active:bg-slate-100 transition">📤 Chia sẻ</button>
+      <button onclick="printShopList()" class="flex-1 py-3 bg-sky-600 text-white rounded-xl text-sm font-bold hover:bg-sky-700 active:bg-sky-800 transition">🖨 In / PDF</button>
+    </div>
+  </div>
+</div>
+
 <!-- Image lightbox -->
 <div id="imgLightbox" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" onclick="closeImgLightbox()">
   <img id="imgLightboxImg" src="" class="max-w-full max-h-full rounded-xl object-contain shadow-2xl"/>
+</div>
+
+<!-- Print area: hidden normally, shown only via @media print -->
+<div id="printArea">
+  <div id="printContent"></div>
 </div>
 
 <!-- Toast -->
@@ -479,6 +539,7 @@ let chatHistory = [];
 let pwaPrompt = null;
 let currentDetailMed = null; // medicine currently shown in detail modal
 let currentDetailRx  = null; // prescription currently shown in detail modal
+let shopSelected = {};       // { medId: { qty, note } } — shopping list selection
 
 // ================================================================
 // 3. BOOT
@@ -503,7 +564,7 @@ function registerSW() {
 // 4. TAB SWITCHING
 // ================================================================
 function switchTab(tab) {
-  ['meds', 'rx', 'chat'].forEach(t => {
+  ['meds', 'rx', 'chat', 'shop'].forEach(t => {
     document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
     document.getElementById(`tab-btn-${t}`).classList.toggle('border-sky-500', t === tab);
     document.getElementById(`tab-btn-${t}`).classList.toggle('text-sky-600',   t === tab);
@@ -512,11 +573,8 @@ function switchTab(tab) {
     const fab = document.getElementById(`fab-${t}`);
     if (fab) fab.classList.toggle('hidden', t !== tab);
   });
-  // No FAB for chat
-  if (tab === 'chat') {
-    document.getElementById('fab-meds').classList.add('hidden');
-    document.getElementById('fab-rx').classList.add('hidden');
-  }
+  // Render shop tab on entry (also re-checks FAB visibility by count)
+  if (tab === 'shop') renderShopTab();
 }
 
 // ================================================================
@@ -1438,6 +1496,207 @@ function toast(msg, ms = 2800) {
 
 function setLoading(id, on) {
   document.getElementById(id).classList.toggle('hidden', !on);
+}
+
+// ================================================================
+// 19. SHOPPING LIST
+// ================================================================
+function renderShopTab(filter) {
+  if (filter === undefined) {
+    const el = document.getElementById('shopSearchInput');
+    filter = el ? el.value : '';
+  }
+
+  const list  = document.getElementById('shopMedList');
+  const empty = document.getElementById('shopEmpty');
+  list.innerHTML = '';
+
+  if (allMeds.length === 0) {
+    empty.classList.remove('hidden');
+    updateShopFab();
+    return;
+  }
+  empty.classList.add('hidden');
+
+  const lo = filter.toLowerCase();
+  const filtered = filter
+    ? allMeds.filter(m =>
+        m.name.toLowerCase().includes(lo) ||
+        (m.active_ingredient && m.active_ingredient.toLowerCase().includes(lo)) ||
+        (m.indication && m.indication.toLowerCase().includes(lo))
+      )
+    : allMeds;
+
+  filtered.forEach(m => {
+    const sel = shopSelected[m.id];
+    const isChecked = !!sel;
+
+    const div = document.createElement('div');
+    div.className = `bg-white rounded-2xl border ${isChecked ? 'border-sky-400' : 'border-slate-100'} shadow-sm p-3 transition-all`;
+
+    div.innerHTML = `
+      <label class="flex items-start gap-3 cursor-pointer select-none">
+        <input type="checkbox" ${isChecked ? 'checked' : ''}
+          onchange="toggleShopItem(${m.id}, this.checked)"
+          class="mt-1 w-5 h-5 rounded accent-sky-600 cursor-pointer flex-shrink-0"/>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-sm leading-snug">${h(m.name)}</p>
+          ${m.active_ingredient ? `<p class="text-xs text-slate-500 mt-0.5">${h(m.active_ingredient)}</p>` : ''}
+          ${m.indication ? `<p class="text-xs text-slate-400 truncate mt-0.5">${h(m.indication)}</p>` : ''}
+        </div>
+      </label>
+      ${isChecked ? `
+        <div class="mt-3 space-y-2 pl-8">
+          <input type="text" placeholder="Số lượng (vd: 2 hộp, 1 lọ...)"
+            value="${a(sel.qty)}"
+            oninput="updateShopItem(${m.id}, 'qty', this.value)"
+            class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+          <input type="text" placeholder="Ghi chú mua (không bắt buộc)"
+            value="${a(sel.note)}"
+            oninput="updateShopItem(${m.id}, 'note', this.value)"
+            class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
+        </div>
+      ` : ''}
+    `;
+    list.appendChild(div);
+  });
+
+  updateShopFab();
+}
+
+function toggleShopItem(medId, checked) {
+  if (checked) {
+    shopSelected[medId] = { qty: '', note: '' };
+  } else {
+    delete shopSelected[medId];
+  }
+  const filter = document.getElementById('shopSearchInput')?.value || '';
+  renderShopTab(filter);
+}
+
+function updateShopItem(medId, field, value) {
+  if (shopSelected[medId]) shopSelected[medId][field] = value;
+}
+
+function clearShopSelection() {
+  shopSelected = {};
+  const searchEl = document.getElementById('shopSearchInput');
+  if (searchEl) searchEl.value = '';
+  renderShopTab('');
+}
+
+function updateShopFab() {
+  const count = Object.keys(shopSelected).length;
+  const fab = document.getElementById('fab-shop');
+  const btn = document.getElementById('shopFabBtn');
+  const clearBtn = document.getElementById('shopClearBtn');
+  if (!fab || !btn) return;
+  if (count > 0) {
+    fab.classList.remove('hidden');
+    btn.textContent = `📋 Tạo danh sách (${count} thuốc)`;
+    if (clearBtn) clearBtn.classList.remove('hidden');
+  } else {
+    fab.classList.add('hidden');
+    if (clearBtn) clearBtn.classList.add('hidden');
+  }
+}
+
+function openShopPreview() {
+  const entries = Object.entries(shopSelected);
+  if (entries.length === 0) { toast('Chọn ít nhất 1 thuốc'); return; }
+
+  const items = entries.map(([medId, sel]) => {
+    const m = allMeds.find(x => x.id === +medId);
+    return m ? { ...m, qty: sel.qty, note: sel.note } : null;
+  }).filter(Boolean);
+
+  const dateStr = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  const contentHtml = items.map((m, i) => `
+    <div class="bg-slate-50 rounded-xl p-4 space-y-1">
+      <div class="flex items-start justify-between gap-2">
+        <p class="font-bold text-base">${i + 1}. ${h(m.name)}</p>
+        ${m.qty ? `<span class="bg-sky-100 text-sky-700 text-sm font-semibold px-2 py-0.5 rounded-lg whitespace-nowrap flex-shrink-0">${h(m.qty)}</span>` : ''}
+      </div>
+      ${m.active_ingredient ? `<p class="text-sm text-slate-600">Hoạt chất: <span class="font-medium">${h(m.active_ingredient)}</span></p>` : ''}
+      ${m.indication ? `<p class="text-sm text-slate-500">Chỉ định: ${h(m.indication)}</p>` : ''}
+      ${m.note ? `<p class="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-1.5 mt-1">📝 ${h(m.note)}</p>` : ''}
+    </div>
+  `).join('');
+
+  document.getElementById('shopPreviewContent').innerHTML = `
+    <div class="mb-4 pb-3 border-b border-slate-100">
+      <p class="text-slate-500 text-sm">Ngày: <span class="font-medium text-slate-700">${dateStr}</span></p>
+      <p class="text-slate-500 text-sm mt-0.5">${items.length} loại thuốc cần mua</p>
+    </div>
+    <div class="space-y-3">${contentHtml}</div>
+    <p class="text-xs text-slate-300 text-center mt-8">Tủ thuốc gia đình</p>
+  `;
+
+  document.getElementById('printContent').innerHTML = buildShopPrintHtml(items, dateStr);
+  document.getElementById('shopPreviewModal').classList.remove('hidden');
+}
+
+function closeShopPreview() {
+  document.getElementById('shopPreviewModal').classList.add('hidden');
+}
+
+function buildShopPrintHtml(items, dateStr) {
+  const rows = items.map((m, i) => `
+    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:12px;break-inside:avoid;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <strong style="font-size:16px;">${i + 1}. ${h(m.name)}</strong>
+        ${m.qty ? `<span style="background:#e0f2fe;color:#0369a1;padding:2px 10px;border-radius:6px;font-weight:600;white-space:nowrap;">${h(m.qty)}</span>` : ''}
+      </div>
+      ${m.active_ingredient ? `<p style="margin:4px 0 0;color:#475569;font-size:14px;">Hoạt chất: <strong>${h(m.active_ingredient)}</strong></p>` : ''}
+      ${m.indication ? `<p style="margin:2px 0 0;color:#64748b;font-size:13px;">Chỉ định: ${h(m.indication)}</p>` : ''}
+      ${m.note ? `<p style="margin:6px 0 0;color:#92400e;background:#fefce8;padding:4px 10px;border-radius:4px;font-size:13px;">Ghi chú: ${h(m.note)}</p>` : ''}
+    </div>
+  `).join('');
+
+  return `
+    <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;">
+      <h1 style="font-size:22px;font-weight:bold;margin-bottom:4px;">Danh sách thuốc cần mua</h1>
+      <p style="color:#64748b;font-size:14px;margin-bottom:20px;">Ngày: ${dateStr} &nbsp;·&nbsp; ${items.length} loại thuốc</p>
+      ${rows}
+      <p style="margin-top:24px;color:#cbd5e1;font-size:12px;text-align:center;">Tủ thuốc gia đình</p>
+    </div>
+  `;
+}
+
+function printShopList() {
+  window.print();
+}
+
+async function shareShopListText() {
+  const entries = Object.entries(shopSelected);
+  if (!entries.length) return;
+
+  const lines = entries.map(([medId, sel]) => {
+    const m = allMeds.find(x => x.id === +medId);
+    if (!m) return null;
+    let line = m.name;
+    if (m.active_ingredient) line += ` (${m.active_ingredient})`;
+    if (sel.qty) line += ` — ${sel.qty}`;
+    if (sel.note) line += ` [${sel.note}]`;
+    return line;
+  }).filter(Boolean);
+
+  const dateStr = new Date().toLocaleDateString('vi-VN');
+  const text = `Danh sách thuốc cần mua (${dateStr}):\n\n` + lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
+
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Danh sách mua thuốc', text });
+    } else {
+      await navigator.clipboard.writeText(text);
+      toast('✅ Đã sao chép vào clipboard');
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    try { await navigator.clipboard.writeText(text); toast('✅ Đã sao chép'); }
+    catch { toast('Không thể chia sẻ'); }
+  }
 }
 
 // ================================================================
