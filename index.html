@@ -59,14 +59,6 @@
   </button>
 </header>
 
-<!-- API key warning -->
-<div id="noKeyBanner" class="hidden bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800 flex items-center gap-2">
-  <span>⚠️</span>
-  <span>Chưa có Anthropic API key — chức năng AI sẽ không hoạt động.
-    <button onclick="openSettings()" class="underline font-semibold ml-1">Thêm ngay</button>
-  </span>
-</div>
-
 <!-- Backup reminder banner -->
 <div id="backupBanner" class="hidden bg-blue-50 border-b border-blue-200 px-4 py-2 text-sm text-blue-800 flex items-center justify-between gap-2">
   <div class="flex items-center gap-2">
@@ -176,20 +168,6 @@
     <div class="flex items-center justify-between">
       <h2 class="font-bold text-lg">⚙️ Cài đặt</h2>
       <button onclick="closeSettings()" class="text-slate-400 hover:text-slate-600 text-3xl leading-none">&times;</button>
-    </div>
-
-    <div>
-      <label class="block text-sm font-semibold text-slate-700 mb-1">Anthropic API Key</label>
-      <div class="flex gap-2">
-        <input type="text" id="apiKeyInput" placeholder="sk-ant-..."
-          class="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"/>
-        <button onclick="document.getElementById('apiKeyInput').value=''" type="button"
-          class="px-3 py-2 border border-slate-200 rounded-xl text-sm text-slate-400 hover:text-red-500 hover:border-red-200 transition-colors">
-          Xóa
-        </button>
-      </div>
-      <p class="text-xs text-slate-400 mt-1">Lưu trong localStorage, không bao giờ lên GitHub</p>
-
     </div>
 
     <div>
@@ -480,7 +458,6 @@ let pwaPrompt = null;
 async function boot() {
   await initDB();
   registerSW();
-  checkApiKey();
   checkBackupReminder();
   await refreshMeds();
   await refreshRx();
@@ -517,7 +494,6 @@ function switchTab(tab) {
 // 5. SETTINGS
 // ================================================================
 function openSettings() {
-  document.getElementById('apiKeyInput').value = localStorage.getItem('anthropic_api_key') || '';
   updateLastBackupInfo();
   syncBackupIntervalUI();
   document.getElementById('settingsModal').classList.remove('hidden');
@@ -526,29 +502,16 @@ function closeSettings() {
   document.getElementById('settingsModal').classList.add('hidden');
 }
 function saveSettings() {
-  const k = document.getElementById('apiKeyInput').value.trim();
-  if (k) localStorage.setItem('anthropic_api_key', k);
-  else   localStorage.removeItem('anthropic_api_key');
-
-  checkApiKey();
   closeSettings();
   toast('Đã lưu cài đặt');
 }
 async function testAPIConnection() {
-  const key = document.getElementById('apiKeyInput').value.trim() || getApiKey();
-  if (!key) { alert('Chưa có API key'); return; }
-
-  toast('Đang test qua proxy...');
+  toast('Đang test kết nối...');
   try {
     const r = await fetch(CLAUDE_ENDPOINT, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-      },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
         max_tokens: 10,
         messages: [{ role: 'user', content: 'Hi' }]
       })
@@ -563,12 +526,6 @@ async function testAPIConnection() {
     alert('❌ Lỗi:\n' + e.name + ': ' + e.message);
   }
 }
-
-function checkApiKey() {
-  const has = !!localStorage.getItem('anthropic_api_key');
-  document.getElementById('noKeyBanner').classList.toggle('hidden', has);
-}
-function getApiKey() { return localStorage.getItem('anthropic_api_key'); }
 
 // ================================================================
 // 5b. BACKUP REMINDER
@@ -636,19 +593,12 @@ function syncBackupIntervalUI() {
 const CLAUDE_ENDPOINT = 'https://tuthuoc.nguyenanhchi.workers.dev';
 
 async function callClaude(messages, system = null, maxTokens = 1024) {
-  const key = getApiKey();
-  if (!key) { toast('Chưa có API key — vào Settings để thêm'); throw new Error('no_key'); }
-
-  const body = { model: 'claude-sonnet-4-6', max_tokens: maxTokens, messages };
+  const body = { max_tokens: maxTokens, messages };
   if (system) body.system = system;
 
   const r = await fetch(CLAUDE_ENDPOINT, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-    },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body)
   });
 
@@ -906,7 +856,7 @@ async function aiFillMed() {
     if (json.contraindication)  document.getElementById('medContra').value      = json.contraindication;
     toast('✅ Đã điền thông tin từ AI');
   } catch (e) {
-    if (e.message !== 'no_key') toast('Lỗi AI: ' + e.message);
+    toast('Lỗi AI: ' + e.message);
   } finally {
     setLoading('medAiLoading', false);
     document.getElementById('aiFillBtn').disabled = false;
@@ -938,7 +888,7 @@ async function ocrMedImage() {
       toast('Không đọc được tên thuốc từ ảnh');
     }
   } catch (e) {
-    if (e.message !== 'no_key') toast('Lỗi OCR: ' + e.message);
+    toast('Lỗi OCR: ' + e.message);
   } finally {
     setLoading('medAiLoading', false);
     document.getElementById('ocrMedBtn').disabled = false;
@@ -1134,7 +1084,7 @@ async function ocrRxImage() {
       toast(`✅ Nhận dạng ${json.medicines.length} thuốc từ toa`);
     }
   } catch (e) {
-    if (e.message !== 'no_key') toast('Lỗi OCR toa: ' + e.message);
+    toast('Lỗi OCR toa: ' + e.message);
   } finally {
     setLoading('rxOcrLoading', false);
     document.getElementById('ocrRxBtn').disabled = false;
@@ -1200,8 +1150,6 @@ async function sendChat() {
   const input = document.getElementById('chatInput');
   const msg = input.value.trim();
   if (!msg) return;
-  if (!getApiKey()) { toast('Chưa có API key — vào Settings để thêm'); return; }
-
   input.value = ''; input.style.height = '';
   appendChat('user', msg);
   chatHistory.push({ role: 'user', content: msg });
@@ -1225,7 +1173,7 @@ async function sendChat() {
     if (el) el.querySelector('.chat-bubble').textContent = text;
   } catch (e) {
     const el = document.getElementById(thinkId);
-    if (el) el.querySelector('.chat-bubble').textContent = e.message === 'no_key' ? '⚠️ Cần API key' : 'Lỗi: ' + e.message;
+    if (el) el.querySelector('.chat-bubble').textContent = 'Lỗi: ' + e.message;
     chatHistory.pop(); // remove failed user message
   } finally {
     btn.disabled = false; btn.textContent = 'Gửi';
