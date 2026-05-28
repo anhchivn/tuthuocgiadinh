@@ -478,6 +478,7 @@ let rxImgBlob  = null;      // current prescription image
 let chatHistory = [];
 let pwaPrompt = null;
 let currentDetailMed = null; // medicine currently shown in detail modal
+let currentDetailRx  = null; // prescription currently shown in detail modal
 
 // ================================================================
 // 3. BOOT
@@ -900,9 +901,14 @@ function closeMedDetail() {
 
 function showFullImg() {
   if (!currentDetailMed?.image) return;
-  const src = URL.createObjectURL(currentDetailMed.image);
   const img = document.getElementById('imgLightboxImg');
-  img.src = src;
+  img.src = URL.createObjectURL(currentDetailMed.image);
+  document.getElementById('imgLightbox').classList.remove('hidden');
+}
+function showFullRxImg() {
+  if (!currentDetailRx?.image) return;
+  const img = document.getElementById('imgLightboxImg');
+  img.src = URL.createObjectURL(currentDetailRx.image);
   document.getElementById('imgLightbox').classList.remove('hidden');
 }
 function closeImgLightbox() {
@@ -1175,10 +1181,11 @@ async function openRxDetail(id) {
   const [rx, items] = await Promise.all([dbGet('prescriptions', id), dbIdx('rx_items', 'rx_id', id)]);
   if (!rx) return;
 
+  currentDetailRx = rx;
   let imgHtml = '';
   if (rx.image) {
     const src = URL.createObjectURL(rx.image);
-    imgHtml = `<img src="${src}" class="w-full h-48 object-cover rounded-t-2xl" onload="URL.revokeObjectURL(this.src)"/>`;
+    imgHtml = `<img src="${src}" class="w-full h-48 object-cover rounded-t-2xl cursor-zoom-in active:opacity-90 transition-opacity" onclick="showFullRxImg()" onload="URL.revokeObjectURL(this.src)"/>`;
   }
 
   const itemsHtml = items.length
