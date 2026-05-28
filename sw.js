@@ -16,8 +16,8 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Never cache Anthropic API calls
-  if (e.request.url.includes('api.anthropic.com')) return;
+  // Never cache API calls
+  if (e.request.url.includes('generativelanguage.googleapis.com')) return;
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
       if (res.ok && e.request.method === 'GET') {
