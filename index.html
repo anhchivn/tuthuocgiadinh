@@ -414,6 +414,11 @@
   </div>
 </div>
 
+<!-- Image lightbox -->
+<div id="imgLightbox" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" onclick="closeImgLightbox()">
+  <img id="imgLightboxImg" src="" class="max-w-full max-h-full rounded-xl object-contain shadow-2xl"/>
+</div>
+
 <!-- Toast -->
 <div id="toast" class="hidden fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-800/95 text-white px-5 py-3 rounded-2xl text-sm font-medium shadow-xl z-50 whitespace-nowrap max-w-xs text-center"></div>
 
@@ -467,11 +472,12 @@ function idbReq(store, mode, fn) {
 // ================================================================
 // 2. STATE
 // ================================================================
-let allMeds = [];      // all medicines in memory for fast search
-let medImgBlob = null; // current medicine image
-let rxImgBlob  = null; // current prescription image
+let allMeds = [];           // all medicines in memory for fast search
+let medImgBlob = null;      // current medicine image
+let rxImgBlob  = null;      // current prescription image
 let chatHistory = [];
 let pwaPrompt = null;
+let currentDetailMed = null; // medicine currently shown in detail modal
 
 // ================================================================
 // 3. BOOT
@@ -853,10 +859,11 @@ async function openMedDetail(id) {
   const m = await dbGet('medicines', id);
   if (!m) return;
 
+  currentDetailMed = m;
   let imgHtml;
   if (m.image) {
     const src = URL.createObjectURL(m.image);
-    imgHtml = `<img src="${src}" class="w-full h-52 object-cover rounded-t-2xl" onload="URL.revokeObjectURL(this.src)"/>`;
+    imgHtml = `<img src="${src}" class="w-full h-52 object-cover rounded-t-2xl cursor-zoom-in active:opacity-90 transition-opacity" onclick="showFullImg()" onload="URL.revokeObjectURL(this.src)"/>`;
   } else {
     imgHtml = `<div class="w-full h-52 bg-gradient-to-br from-sky-50 to-blue-100 flex items-center justify-center text-7xl rounded-t-2xl">💊</div>`;
   }
@@ -889,6 +896,20 @@ async function openMedDetail(id) {
 }
 function closeMedDetail() {
   document.getElementById('medDetailModal').classList.add('hidden');
+}
+
+function showFullImg() {
+  if (!currentDetailMed?.image) return;
+  const src = URL.createObjectURL(currentDetailMed.image);
+  const img = document.getElementById('imgLightboxImg');
+  img.src = src;
+  document.getElementById('imgLightbox').classList.remove('hidden');
+}
+function closeImgLightbox() {
+  const img = document.getElementById('imgLightboxImg');
+  URL.revokeObjectURL(img.src);
+  img.src = '';
+  document.getElementById('imgLightbox').classList.add('hidden');
 }
 
 // ================================================================
@@ -1270,12 +1291,27 @@ async function exportData() {
     ...rx, image: rx.image ? await blobToBase64(rx.image) : null, image_type: rx.image?.type || null
   })));
 
-  const blob = new Blob([JSON.stringify({ version: 2, exported_at: new Date().toISOString(), medicines: medsExp, prescriptions: rxsExp, rx_items: rxItems }, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `tuthuoc-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const jsonStr = JSON.stringify({ version: 2, exported_at: new Date().toISOString(), medicines: medsExp, prescriptions: rxsExp, rx_items: rxItems }, null, 2);
+  const filename = `tuthuoc-${new Date().toISOString().slice(0,10)}.json`;
+
+  try {
+    const file = new File([jsonStr], filename, { type: 'application/json' });
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Tủ thuốc — Backup dữ liệu' });
+    } else {
+      // Fallback cho desktop / browser không hỗ trợ Web Share
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') return; // user cancelled share sheet
+    toast('Lỗi xuất: ' + e.message);
+    return;
+  }
 
   // Record backup timestamp and hide reminder banner
   localStorage.setItem(BACKUP_TS_KEY, String(Date.now()));
